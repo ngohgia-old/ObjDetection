@@ -28,7 +28,13 @@ public class ObjBlobDetection {
     private Mat mMask = new Mat();
     private Mat mDilatedMask = new Mat();
     private Mat mHierarchy = new Mat();
+    
+    private int mPyrDownScale;
 
+    private void setPyrDownScale(int scale){
+    	mPyrDownScale = scale;
+    }
+    
     public void setColorRadius(Scalar radius) {
         mColorRadius = radius;
     }
@@ -92,9 +98,11 @@ public class ObjBlobDetection {
     }
 
     // Initialize the class instance
-    public ObjBlobDetection(Mat rgbaImage, int pyrDownCount) {
+    public ObjBlobDetection(Mat rgbaImage, int pyrDownScale) {
     	// pyramid down the image (zoomed in)
-    	for (int i = 0; i < pyrDownCount; i++){
+    	setPyrDownScale(pyrDownScale);
+    	
+    	for (int i = 0; i < mPyrDownScale; i++){
     		if (i == 0)
     			Imgproc.pyrDown(rgbaImage, mPyrDownMat);
     		else
@@ -132,7 +140,9 @@ public class ObjBlobDetection {
         while (each.hasNext()) {
             MatOfPoint contour = each.next();
             if (Imgproc.contourArea(contour) > mMinContourArea*maxArea) {
-                Core.multiply(contour, new Scalar(4,4), contour);
+                Core.multiply(contour, 
+                			new Scalar(mPyrDownScale * mPyrDownScale, mPyrDownScale * mPyrDownScale), 
+                			contour);
                 mContours.add(contour);
             }
         }

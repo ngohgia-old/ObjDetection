@@ -9,6 +9,7 @@ import org.opencv.android.Utils;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfInt;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
@@ -63,7 +64,8 @@ public class ObjDetectImgProc extends Activity implements OnTouchListener{
 	private SubMenu				mDiffViewMenu;
 	
 	private ObjBlobDetection 	mObjDetection;
-	private int					mPyrDownCount;
+	private static final int	mPyrDownScale = 2;
+	private static final int	mColorSelectionSize = 10;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -91,9 +93,8 @@ public class ObjDetectImgProc extends Activity implements OnTouchListener{
 		
 		mModMat = mSrcMat.clone();
 		
-		mPyrDownCount = 2;
+		mObjDetection = new ObjBlobDetection(mSrcMat, mPyrDownScale);
 		
-		mObjDetection = new ObjBlobDetection(mSrcMat, mPyrDownCount);
         mSpectrum = new Mat();
         mBlobColorRgb = new Scalar(255);
         mBlobColorHsv = new Scalar(255);
@@ -131,24 +132,25 @@ public class ObjDetectImgProc extends Activity implements OnTouchListener{
 			int id = item.getItemId();
 			switch (id){
 				case RGB_VIEW:
-					mModMat = mSrcMat;
+					mModMat = mSrcMat.clone();
+					
 					setImgView(mSrcMat, 0);
 					return true;
 				case PYRDOWN_VIEW:					
 					tmp = mObjDetection.getPyrDownMat();
-					setImgView(tmp, mPyrDownCount);
+					setImgView(tmp, mPyrDownScale);
 					return true;
 				case HSV_VIEW:
 					tmp = mObjDetection.getHsvMat();
-					setImgView(tmp, mPyrDownCount);
+					setImgView(tmp, mPyrDownScale);
 					return true;
 				case MASK_VIEW:
 					tmp = mObjDetection.getMaskMat();
-					setImgView(tmp, mPyrDownCount);
+					setImgView(tmp, mPyrDownScale);
 					return true;
 				case DILATED_MASK_VIEW:
 					tmp = mObjDetection.getDilatedMask();
-					setImgView(tmp, mPyrDownCount);
+					setImgView(tmp, mPyrDownScale);
 					return true;
 				default:
 		            return super.onOptionsItemSelected(item);
@@ -217,18 +219,18 @@ public class ObjDetectImgProc extends Activity implements OnTouchListener{
         int x = (int)event.getX() - xOffset;
         int y = (int)event.getY() - yOffset;
 
-        Toast.makeText(this, "Touch image coordinates: (" + x + ", " + y + ")", Toast.LENGTH_SHORT);
+        Toast.makeText(this, "Touch image coordinates: (" + x + ", " + y + ")", Toast.LENGTH_SHORT).show();
         Log.i(LOG_TAG, "Touch image coordinates: (" + x + ", " + y + ")");
 
         if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
 
         Rect touchedRect = new Rect();
 
-        touchedRect.x = (x>4) ? x-4 : 0;
-        touchedRect.y = (y>4) ? y-4 : 0;
+        touchedRect.x = (x>mColorSelectionSize) ? x-mColorSelectionSize : 0;
+        touchedRect.y = (y>mColorSelectionSize) ? y-mColorSelectionSize : 0;
 
-        touchedRect.width = (x+4 < cols) ? x + 4 - touchedRect.x : cols - touchedRect.x;
-        touchedRect.height = (y+4 < rows) ? y + 4 - touchedRect.y : rows - touchedRect.y;
+        touchedRect.width = (x+mColorSelectionSize < cols) ? x + mColorSelectionSize - touchedRect.x : cols - touchedRect.x;
+        touchedRect.height = (y+mColorSelectionSize < rows) ? y + mColorSelectionSize - touchedRect.y : rows - touchedRect.y;
 
         Mat touchedRegionRgba = mSrcMat.submat(touchedRect);
 
@@ -256,8 +258,8 @@ public class ObjDetectImgProc extends Activity implements OnTouchListener{
         Log.i(LOG_TAG, "Contours: " + contours.toString());
         
         Mat mOverlayMat = mModMat.clone();
-        Core.rectangle(mOverlayMat, new Point((double)x-4, (double) y-4 ),
-				new Point((double)x+4, (double) y+4), new Scalar(0, 255, 255));
+        Core.rectangle(mOverlayMat, new Point((double)x-mColorSelectionSize, (double) y-mColorSelectionSize ),
+				new Point((double)x+mColorSelectionSize, (double) y+mColorSelectionSize), new Scalar(0, 255, 255));
         Core.rectangle(mOverlayMat, new Point(10.0,  10 - yOffset), new Point(74.0, 74 - yOffset), mBlobColorRgb, -1);
         Mat spectrumLabel = mOverlayMat	.rowRange(10 - yOffset, 10 - yOffset + mSpectrum.rows())
         								.colRange(80, 80 + mSpectrum.cols());
@@ -266,15 +268,29 @@ public class ObjDetectImgProc extends Activity implements OnTouchListener{
         Core.addWeighted(mOverlayMat, 1.0, mModMat, 0.0, 0, mModMat);
         
         //mOverlayMat = mModMat.clone();
+        
+        MatOfInt hullInt = new MatOfInt();
+        List<Point> hullPointList = new ArrayList<Point>();
+        MatOfPoint hullPointMat = new MatOfPoint();
+        
         Iterator<MatOfPoint> each = contours.iterator();
         each = contours.iterator();
         while (each.hasNext()) {
             MatOfPoint contour = each.next();
             
-            MatOfPoint2f tmpContour = new MatOfPoint2f(contour.toArray()); 
-            Imgproc.approxPolyDP(tmpContour, tmpContour, 0.01, true);
-            contour = new MatOfPoint(tmpContour.toArray());
-            Core.fillConvexPoly(mOverlayMat, contour, CONTOUR_COLOR);
+            //MatOfPoint2f tmpContour = new MatOfPoint2f(contour.toArray());
+            //Imgproc.convexHull(tmpContour, tmpContour)
+            //Imgproc.approxPolyDP(tmpContour, tmpContour, 0.01, true);
+            //contour = new MatOfPoint(tmpContour.toArray());
+            Imgproc.convexHull(contour, hullInt);
+           
+            for (int j = 0; j < hullInt.toList().size(); j++){
+            	hullPointList.add(contour.toList().get(hullInt.toList().get(j)));
+            }
+            
+            hullPointMat.fromList(hullPointList);
+            
+            Core.fillConvexPoly(mOverlayMat, hullPointMat, CONTOUR_COLOR);
         }
         Core.addWeighted(mOverlayMat, 0.3, mModMat, 0.7, 0, mModMat);        
         
